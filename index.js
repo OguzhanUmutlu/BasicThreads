@@ -1,15 +1,22 @@
 (function () {
+    //CONTENT//
     let __objId = 0;
     let objId = new Map;
     const getObjId = obj => objId.get(obj) || (objId.set(obj, ++__objId) && __objId);
-    // todo: extended classes
+    const isNode = typeof window === "undefined";
+    const _global = isNode ? global : window;
+
     // todo: connection between threads, thread channels maybe?
-    function isDefaultClass(cl) {
-        const glob = typeof window === "undefined" ? global : window;
-        return isClass(cl) && glob[cl.name] === cl && !Object.keys(glob).includes(cl.name); // IDK why globals work like this
+
+    function isClass(func) {
+        return typeof func === "function" && func.prototype && func.prototype.constructor === func;
     }
 
-    function doAllowExtra(any, list, p) {
+    function isBuiltInClass(cl) {
+        return _global[cl.name] === cl && !Object.keys(_global).includes(cl.name); // IDK why globals work like this
+    }
+
+    function doAllowAny(any, list, p) {
         const type = typeof any;
         if (["undefined", "boolean", "number", "bigint", "string", "symbol"].includes(type) || any === null) {
             return any;
@@ -19,34 +26,37 @@
                 list.push(`${p}=new Int8Array(${p}).buffer;`);
                 return [...new Int8Array(any)];
             }
-            if (any.constructor instanceof Function && !isDefaultClass(any.constructor)) {
+            if (any.constructor instanceof Function && !isBuiltInClass(any.constructor)) {
                 if (!objId.has(any.constructor)) {
                     const id = getObjId(any.constructor);
-                    doAllowExtra(any.constructor, list, `arguments[2].__${id}`);
+                    doAllowAny(any.constructor, list, `arguments[2]._${id}`);
                 }
                 const id = getObjId(any.constructor);
-                list.push(`${p}=Object.assign(new arguments[2].__${id}(),${p});`);
+                list.push(`${p}=Object.assign(new arguments[2]._${id}(),${p});`);
                 return {...any};
             }
             for (const i in any) {
-                any[i] = doAllowExtra(any[i], list, p + `[${JSON.stringify(i)}]`);
+                any[i] = doAllowAny(any[i], list, p + `[${JSON.stringify(i)}]`);
             }
             return any;
         }
         if (type !== "function") throw new Error("Invalid type: " + type);
-        if (isDefaultClass(any)) {
+        if (isBuiltInClass(any)) {
             list.push(`${p}=${any.name};`);
             return 0;
         }
-        // todo: recursively run for classes that extend this class
-        any = cleanFunc(any);
-        //console.log(any)
-        list.push(`${p}=${any};`);
+        const prototype = Object.getPrototypeOf(any);
+        let text = cleanFunc(any);
+        if (isClass(any) && isClass(prototype)) {
+            if (!objId.has(prototype)) {
+                const id = getObjId(prototype);
+                doAllowAny(prototype, list, `arguments[2]._${id}`);
+            }
+            const id = getObjId(prototype);
+            text = text.replace(new RegExp(`extends\\s+${prototype.name}\\s*\\{`), `extends arguments[2]._${id}{`);
+        }
+        list.push(`${p}=${text};`);
         return 0;
-    }
-
-    function isClass(func) {
-        return typeof func === "function" && func.prototype && func.prototype.constructor === func;
     }
 
     function cleanFunc(func) {
@@ -55,158 +65,117 @@
             if (!/^class\s+extends\s/.test(func)) func = func.replace(/^class\s+[^({\s]+/, "class ");
             return func;
         }
+
         func = func.toString().trim();
-        const asyncReg = /^async\s+[^f][^u][^n][^c][^t][^i][^o][^n]\s*\(/.test(func);
-        const asyncReg2 = /^async\s+\(/.test(func);
-        if (func[0] !== "(" && func.includes("(") && !func.startsWith("async")) {
-            func = func.substring(func.indexOf("("));
-            func = "function" + func;
-        } else if (asyncReg && !asyncReg2) {
-            func = func.substring("async".length).trim();
-            func = func.substring(func.indexOf("("));
-            func = "async function" + func;
+        const isAsync = func.startsWith("async ");
+        if (isAsync) func = func.substring("async ".length).trim();
+
+        // ABC (abc) { return "ABC" }
+        if (!func.startsWith("function ") && /^[^(]+\s*\(/.test(func)) {
+            return `function ${func}`;
         }
+
+        // function ABC () { return "ABC" }
+        // (abc) => "ABC"
+        // abc => "ABC"
         return func;
     }
 
+    window.cln = cleanFunc;
+
     function runnerEnder(worker, func) {
-        return (args = [], define = {}, allowExtra = true) => {
-            const node = typeof window === "undefined";
-            const uuid = (node ? (global.crypto ?? require("crypto")) : crypto).randomUUID();
+        return (args = [], define = {}, allowAny = true) => {
+            const uuid = (isNode ? (global.crypto ?? require("crypto")) : crypto).randomUUID();
             const p = new Promise(r => {
-                if (node) worker.on("message", m => m && m[0] === uuid && (r(m[1]) || worker.terminate()));
-                else worker.onmessage = m => {
-                    m = m.data;
-                    m && m[0] === uuid && (r(m[1]) || worker.terminate());
+                const onMessage = msg => {
+                    if (!msg || msg[0] !== uuid) return;
+                    r(msg[1]);
+                    worker.terminate();
                 };
+                if (isNode) worker.on("message", onMessage);
+                else worker.addEventListener("message", m => onMessage(m.data));
             });
             p.terminate = () => worker.terminate();
             const definitionReplacements = [];
-            if (allowExtra) {
-                doAllowExtra(args, definitionReplacements, "arguments[0]");
-                doAllowExtra(define, definitionReplacements, "arguments[1]");
+            if (allowAny) {
+                doAllowAny(args, definitionReplacements, "arguments[0]");
+                doAllowAny(define, definitionReplacements, "arguments[1]");
             }
+            // noinspection JSAnnotator
             const arguments = [args, define, {}];
             const code = `${definitionReplacements.join("")}
 const {${Object.keys(define).join(",")}} = arguments[1]
 return (async () => (${cleanFunc(func)})(...arguments[0]))(...arguments[0])`;
-            //console.log(code.replaceAll(";", "\n\n"));
             worker.postMessage([code, arguments, uuid]);
             return p;
         };
     }
 
-    function runnerNodeRaw(func, ender = runnerEnder) {
+    function runnerNodeRaw(func) {
         const {Worker} = require("worker_threads");
         const worker = new Worker(__filename);
-        return ender(worker, func);
+        return runnerEnder(worker, func);
     }
 
-    function runnerWebRaw(func, ender = runnerEnder) {
+    function runnerWebRaw(func) {
         const worker = new Worker(URL.createObjectURL(new Blob([`
-onmessage = async args => {
+async function cb(args) {
+    removeEventListener("message", args);
     args = args.data;
     const res = await Function("arguments", args[0])(args[1]);
     postMessage([args[2], res]);
-};`], {
+}
+addEventListener("message", cb);
+`], {
             type: "application/javascript"
         })));
-        return ender(worker, func);
+        return runnerEnder(worker, func);
     }
 
-    class Definitions {
-        __obj = {};
+    const runner = isNode ? runnerNodeRaw : runnerWebRaw;
 
-        clear() {
-            this.__obj = {};
-        };
-
-        delete(key) {
-            delete this.__obj[key];
-        };
-
-        forEach(callback) {
-            for (const i in this.__obj) {
-                callback(this.__obj[i], i, this);
+    function Thread(func) {
+        const run = runner(func);
+        const out = (...args) => thread.run(...args);
+        const thread = {
+            allowsAny: true,
+            definitions: {},
+            setAllowsAny(value = true) {
+                this.allowsAny = value;
+                return this;
+            },
+            define(obj) {
+                Object.assign(this.definitions, obj);
+                return this;
+            },
+            use(obj) {
+                this.define(obj);
+                return this;
+            },
+            run(...args) {
+                return run(args, this.definitions, this.allowsAny)
             }
-            return this;
         };
-
-        get(key) {
-            return this.__obj[key];
-        };
-
-        has(key) {
-            return key in this.__obj;
-        };
-
-        set(key, value) {
-            this.__obj[key] = value;
-            return this;
-        };
-
-        define(obj) {
-            Object.assign(this.__obj, obj);
-            return this;
-        };
-
-        get size() {
-            return Object.keys(this.__obj).length;
-        };
-
-        [Symbol.iterator]() {
-            return Object.keys(this.__obj).map(i => [i, this.__obj[i]]);
-        };
+        return Object.assign(out, Thread);
     }
 
-    function makeThreadObject(fn) {
-        function Thread(func) {
-            const thread = fn(func);
-            const self = {
-                allowsAny: true,
-                definitions: new Definitions,
-                setAllowsAny(value = true) {
-                    this.allowsAny = value;
-                    return this;
-                },
-                define(obj) {
-                    this.definitions.define(obj);
-                    return this;
-                },
-                use(obj) {
-                    this.define(obj);
-                    return this;
-                },
-                run(...args) {
-                    return thread(args, this.definitions.__obj, this.allowsAny)
-                }
-            };
-            return Object.assign(self.run, self);
-        }
+    Thread.prepare = Thread;
+    Thread.runner = runner;
 
-        Thread.prepare = Thread;
-        Thread.runner = fn;
-        return Thread;
-    }
-
-    function defineExtra(from, to, n) {
-        Object.defineProperty(from, n, {
-            get: () => to,
-            enumerable: false, configurable: false
-        });
-    }
-
-    if (typeof window === "undefined") {
-        const {isMainThread, parentPort} = require("worker_threads");
-        if (isMainThread) {
-            const Thread = makeThreadObject(runnerNodeRaw);
-            defineExtra(module, Thread, "exports");
-            defineExtra(module.exports, Thread, "default");
-        } else parentPort.on("message", async args => {
+    if (isNode) {
+        const {isMainThread, parentPort} = require("worker" + "_threads"); // maybe this fixes the possible jsx issues?
+        if (!isMainThread) parentPort.once("message", async args => {
             const res = await Function("arguments", args[0])(args[1]);
             parentPort.postMessage([args[2], res]);
         });
-    } else {
-        defineExtra(window, makeThreadObject(runnerWebRaw), "Thread");
     }
+
+    Thread.Thread = Thread;
+    Object.freeze(Thread);
+
+    //EXPORT//
+    if (isNode) module.exports = Thread;
+    else window.Thread = Thread;
+    //EXPORT//
+    //CONTENT//
 })();

@@ -8,17 +8,29 @@
         };
     }
 
-    const a = new A();
+    class B extends A {
+        c = 20;
+
+        d(e, f) {
+            return e * f;
+        };
+    }
+
+    const b = new B();
 
     const thread = Thread.prepare(() => {
 
-        console.log(a.b(1, 2));
+        console.log(b.b(1, 2));
+
+        console.log(b);
+
+        console.log(b.constructor);
 
     });
 
-    thread.use({a});
+    thread.use({b});
 
-    const result = await thread.run(3, 4);
+    const result = await thread.run();
 
     console.log(result);
 </script>

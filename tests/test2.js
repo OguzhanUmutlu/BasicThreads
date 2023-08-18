@@ -16,16 +16,15 @@ const Thread = require("../index");
         };
     }
 
-    const a = new A();
     const b = new B();
 
     const thread = Thread.prepare(() => {
 
-        console.log(a.b(1, 2));
+        console.log(b.b(1, 2));
 
     });
 
-    thread.use({a});
+    thread.use({b});
 
     const result = await thread.run(3, 4);
 

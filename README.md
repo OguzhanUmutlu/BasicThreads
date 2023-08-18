@@ -1,2 +1,3 @@
 # SimpleThreads
-This is a Node.js thread library that makes creating threads really easy!
+This is a JavaScript thread library that supports both node.js, typescript and web!
+
