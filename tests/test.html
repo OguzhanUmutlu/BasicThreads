@@ -1,0 +1,32 @@
+<script src="../index.js"></script>
+<script type="module">
+    class A {
+        static async A(a) {
+            return "A";
+        };
+
+        static B(a) {
+            return "B";
+        };
+
+        static C = (a) => "C";
+        static D = async (a) => "D";
+        static E = a => "E";
+        static F = async a => "F";
+        static G = function (a) {
+            return "G";
+        };
+        static H = async function (a) {
+            return "H";
+        };
+    }
+
+    console.log(await Thread(A.A)());
+    console.log(await Thread(A.B)());
+    console.log(await Thread(A.C)());
+    console.log(await Thread(A.D)());
+    console.log(await Thread(A.E)());
+    console.log(await Thread(A.F)());
+    console.log(await Thread(A.G)());
+    console.log(await Thread(A.H)());
+</script>

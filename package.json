@@ -1,0 +1,26 @@
+{
+  "name": "basicthreads",
+  "description": "This is a Node.js thread library that makes creating threads really easy!",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OguzhanUmutlu/SimpleThreads.git"
+  },
+  "types": "index.d.ts",
+  "keywords": [
+    "thread",
+    "threads",
+    "js",
+    "easy",
+    "simple",
+    "oneline",
+    "inline"
+  ],
+  "bugs": {
+    "url": "https://github.com/OguzhanUmutlu/SimpleThreads"
+  },
+  "homepage": "https://github.com/OguzhanUmutlu/SimpleThreads#readme",
+  "license": "MIT",
+  "author": "OguzhanUmutlu"
+}

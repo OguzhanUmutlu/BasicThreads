@@ -1,0 +1,26 @@
+<script src="../index.js"></script>
+<script type="module">
+    function add(a, b) {
+        return a + b;
+    }
+
+    class Adder {
+        add(a, b) {
+            return add(a, b);
+        };
+    }
+
+    const thread = new Thread((a, b) => {
+
+        const adder = new Adder();
+
+        console.log(adder.add(a, b));
+
+    });
+
+    thread.define({Adder, add});
+
+    const result = await thread.run(3, 4);
+
+    console.log(result);
+</script>

@@ -1,0 +1,24 @@
+<script src="../index.js"></script>
+<script type="module">
+    class A {
+        a = 10;
+
+        b(c, d) {
+            return c + d
+        };
+    }
+
+    const a = new A();
+
+    const thread = Thread.prepare(() => {
+
+        console.log(a.b(1, 2));
+
+    });
+
+    thread.use({a});
+
+    const result = await thread.run(3, 4);
+
+    console.log(result);
+</script>
