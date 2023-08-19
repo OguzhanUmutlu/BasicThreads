@@ -242,6 +242,9 @@ addEventListener("message", cb);
             for (const par of thread.__parents) delete par.threads[id];
         };
         Channel.threads = {};
+        Channel.immediate = function (cb, ...args) {
+            return Channel(cb)(...args);
+        };
         return Channel;
     }
 
