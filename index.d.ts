@@ -14,7 +14,7 @@ type ThreadInstance<
     readonly definitions: Definitions
     readonly worker: Worker | NodeWorker
     readonly isAlive: boolean
-    readonly parent: Thread
+    readonly parent: ThreadMain
     readonly autoTermination: AutoTermination
     setAllowsAny<T extends boolean>(value: T): ThreadInstance<T, AutoTermination, Definitions>
     setAutoTermination<T extends boolean>(value: T): ThreadInstance<AllowsAny, T, Definitions>
@@ -25,25 +25,25 @@ type ThreadInstance<
     terminate(): ThreadInstance
 });
 type ThreadConstructor = (callback: Function | string) => ThreadInstance;
-type Thread = ThreadConstructor & {
-    readonly parent: Thread | null;
-    readonly children: Thread[]
+type ThreadMain = ThreadConstructor & {
+    readonly parent: ThreadMain | null;
+    readonly children: ThreadMain[]
     threads: Record<number, ThreadInstance>
     prepare: ThreadConstructor
     immediate(callback: Function | string, ...args: any[]): Result
     //runner(callback: Function | string, id?: number): (args: any[], define: Record<string, any>, allowExtra?: boolean) => Result
-    Thread: Thread
+    Thread: ThreadMain
     find(id: number): ThreadInstance | null
     sendTo(id: number, message: Cloneable): void
     broadcast(message: Cloneable): void
     broadcastToChannel(message: Cloneable): void
     terminate(id: number): void
-    channel(): Thread
+    channel(): ThreadMain
 };
 
 export default Thread;
 
 // @ts-ignore
 declare global {
-    const Thread: Thread;
+    const Thread: ThreadMain;
 }

@@ -35,7 +35,7 @@ In file:
 <!-- OR -->
 
 <script type="module">
-    import Thread from "https://unpkg.com/basicthreads/index.module.min.js";
+    import Thread from "https://unpkg.com/basicthreads/index.min.mjs";
 
     const thread = Thread(() => 2 + 2);
 </script>

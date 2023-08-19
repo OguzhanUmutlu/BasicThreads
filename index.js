@@ -2,10 +2,10 @@
     let __id = 0;
     let objId = new Map;
     const getObjId = obj => objId.get(obj) || (objId.set(obj, ++__id) && __id);
-    const isNode = typeof window === "undefined";
-    const _global = isNode ? global : window;
+    const isNode = typeof window === "undefined" && typeof require !== "undefined";
+    const _global = isNode ? global : (typeof window === "undefined" ? {} : window);
     const WT = () => "worker_threads"; // maybe this fixes the possible jsx issues?
-    const {Worker: NodeWorker, isMainThread, parentPort} = isNode ? require(WT()) : {};
+    const { Worker: NodeWorker, isMainThread, parentPort } = isNode ? require(WT()) : {};
 
     if (isNode && !isMainThread) {
         global.close = () => parentPort.close();
@@ -39,7 +39,7 @@
                 }
                 const id = getObjId(any.constructor);
                 list.push(`${p}=Object.assign(new arguments_[2]._${id}(),${p});`);
-                return {...any};
+                return { ...any };
             }
             for (const i in any) {
                 any[i] = doAllowAny(any[i], list, p + `[${JSON.stringify(i)}]`);
@@ -269,6 +269,9 @@ addEventListener("message", cb);
     const Thread = makeChannel();
 
     //@buildExport//
-    if (isNode) module.exports = Thread; else window.Thread = Thread;
+    if (isNode) module.exports = Thread; else Object.defineProperty(_global, "Thread", {
+        get: () => Thread,
+        enumerable: false, configurable: false
+    });
     //@buildExport//
 })();

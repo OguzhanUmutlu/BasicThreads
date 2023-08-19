@@ -3,3 +3,9 @@ test.js
 tests
 .npmignore
 assets
+
+index.js
+index.d.ts
+
+build/index.d.mts
+build/index.mjs
