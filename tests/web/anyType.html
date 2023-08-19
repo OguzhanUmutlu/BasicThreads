@@ -1,4 +1,4 @@
-<script src="../index.js"></script>
+<script src="../../index.js"></script>
 <script type="module">
     function add(a, b) {
         return a + b;
@@ -14,7 +14,6 @@
         k: Infinity,
         m: NaN,
         add,
-        blob: new Blob(["export default 1;"], {type: "application/javascript"}),
         err: new SyntaxError("stodgy was here"),
         buff: new ArrayBuffer(10),
         arr: [
@@ -30,7 +29,11 @@
         ]
     };
 
-    const thread = new Thread(() => console.log(list));
+    const thread = new Thread(() => {
+        for (const k in list) {
+            console.log(k, list[k]);
+        }
+    });
 
     thread.define({list});
 

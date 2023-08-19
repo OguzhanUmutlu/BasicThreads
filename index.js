@@ -1,12 +1,18 @@
 (function () {
-    //CONTENT//
-    let __objId = 0;
+    let __id = 0;
     let objId = new Map;
-    const getObjId = obj => objId.get(obj) || (objId.set(obj, ++__objId) && __objId);
+    const getObjId = obj => objId.get(obj) || (objId.set(obj, ++__id) && __id);
     const isNode = typeof window === "undefined";
     const _global = isNode ? global : window;
+    const WT = () => "worker_threads"; // maybe this fixes the possible jsx issues?
+    const {Worker: NodeWorker, isMainThread, parentPort} = isNode ? require(WT()) : {};
 
-    // todo: connection between threads, thread channels maybe?
+    if (isNode && !isMainThread) {
+        global.close = () => parentPort.close();
+        return parentPort.once("message", async args => {
+            parentPort.postMessage([args[2], "end", await Function("arguments_", args[0])(args[1])]);
+        });
+    }
 
     function isClass(func) {
         return typeof func === "function" && func.prototype && func.prototype.constructor === func;
@@ -29,10 +35,10 @@
             if (any.constructor instanceof Function && !isBuiltInClass(any.constructor)) {
                 if (!objId.has(any.constructor)) {
                     const id = getObjId(any.constructor);
-                    doAllowAny(any.constructor, list, `arguments[2]._${id}`);
+                    doAllowAny(any.constructor, list, `arguments_[2]._${id}`);
                 }
                 const id = getObjId(any.constructor);
-                list.push(`${p}=Object.assign(new arguments[2]._${id}(),${p});`);
+                list.push(`${p}=Object.assign(new arguments_[2]._${id}(),${p});`);
                 return {...any};
             }
             for (const i in any) {
@@ -46,136 +52,208 @@
             return 0;
         }
         const prototype = Object.getPrototypeOf(any);
-        let text = cleanFunc(any);
+        let text = stringifyFunction(any);
         if (isClass(any) && isClass(prototype)) {
             if (!objId.has(prototype)) {
                 const id = getObjId(prototype);
-                doAllowAny(prototype, list, `arguments[2]._${id}`);
+                doAllowAny(prototype, list, `arguments_[2]._${id}`);
             }
             const id = getObjId(prototype);
-            text = text.replace(new RegExp(`extends\\s+${prototype.name}\\s*\\{`), `extends arguments[2]._${id}{`);
+            text = text.replace(new RegExp(`extends\\s+${prototype.name}\\s*\\{`), `extends arguments_[2]._${id}{`);
         }
         list.push(`${p}=${text};`);
         return 0;
     }
 
-    function cleanFunc(func) {
-        if (isClass(func)) {
-            func = func.toString().trim();
-            if (!/^class\s+extends\s/.test(func)) func = func.replace(/^class\s+[^({\s]+/, "class ");
-            return func;
-        }
-
+    function stringifyFunction(func) {
+        if (isClass(func)) return `(function(){return ${func.toString().trim()}})()`;
         func = func.toString().trim();
         const isAsync = func.startsWith("async ");
         if (isAsync) func = func.substring("async ".length).trim();
+        let startsWithFunction = func.startsWith("function ");
 
         // ABC (abc) { return "ABC" }
-        if (!func.startsWith("function ") && /^[^(]+\s*\(/.test(func)) {
-            return `function ${func}`;
+        if (!startsWithFunction && /^[^(=]+\s*\(/.test(func)) return `function ${func}`;
+
+        // (abc) => "ABC"
+        // abc => "ABC"
+        if (!startsWithFunction) {
+            let id = ++__id;
+            return `function(...args${id}){return(${func})(...args${id})}`;
         }
 
         // function ABC () { return "ABC" }
-        // (abc) => "ABC"
-        // abc => "ABC"
-        return func;
+        return `(()=>{return ${func}})()`;
     }
 
-    window.cln = cleanFunc;
-
-    function runnerEnder(worker, func) {
-        return (args = [], define = {}, allowAny = true) => {
+    function runnerProcessor(worker, func, thread) {
+        return [worker, (args = [], define = {}, allowAny = true, autoTermination = true) => {
             const uuid = (isNode ? (global.crypto ?? require("crypto")) : crypto).randomUUID();
             const p = new Promise(r => {
                 const onMessage = msg => {
                     if (!msg || msg[0] !== uuid) return;
-                    r(msg[1]);
-                    worker.terminate();
+                    if (msg[1] === "end") {
+                        r(msg[2]);
+                        if (autoTermination) worker.terminate();
+                        return;
+                    }
+                    if (msg[1] === "sendTo") return thread.parent.sendTo(msg[2], msg[3]);
+                    if (msg[1] === "broadcast") return thread.parent.broadcast(msg[2]);
                 };
-                if (isNode) worker.on("message", onMessage);
-                else worker.addEventListener("message", m => onMessage(m.data));
+                const onTerminate = () => r();
+                if (isNode) {
+                    worker.on("message", onMessage);
+                    worker.on("exit", onTerminate);
+                } else {
+                    worker.addEventListener("message", m => onMessage(m.data));
+                    worker.addEventListener("close", onTerminate)
+                }
             });
-            p.terminate = () => worker.terminate();
+            p.terminate = () => thread.terminate();
             const definitionReplacements = [];
             if (allowAny) {
-                doAllowAny(args, definitionReplacements, "arguments[0]");
-                doAllowAny(define, definitionReplacements, "arguments[1]");
+                doAllowAny(args, definitionReplacements, "arguments_[0]");
+                doAllowAny(define, definitionReplacements, "arguments_[1]");
             }
             // noinspection JSAnnotator
-            const arguments = [args, define, {}];
+            const arguments_ = [args, define, {}];
             const code = `${definitionReplacements.join("")}
-const {${Object.keys(define).join(",")}} = arguments[1]
-return (async () => (${cleanFunc(func)})(...arguments[0]))(...arguments[0])`;
-            worker.postMessage([code, arguments, uuid]);
+const {${Object.keys(define).join(",")}} = arguments_[1];
+const Thread = {
+    sendTo: (id, msg) => {
+        postMessage(["${uuid}", "sendTo", id, msg]);
+    },
+    broadcast: msg => {
+        postMessage(["${uuid}", "broadcast", msg]);
+    }
+};
+return (async () => (
+
+// YOUR CODE STARTS HERE...
+${stringifyFunction(func)}
+// YOUR CODE ENDS HERE...
+
+)(...arguments_[0]))()`;
+            worker.postMessage([code, arguments_, uuid]);
             return p;
-        };
+        }];
     }
 
-    function runnerNodeRaw(func) {
-        const {Worker} = require("worker_threads");
-        const worker = new Worker(__filename);
-        return runnerEnder(worker, func);
+    function runnerNodeRaw(func, thread) {
+        return runnerProcessor(new NodeWorker(__filename), func, thread);
     }
 
-    function runnerWebRaw(func) {
+    function runnerWebRaw(func, thread) {
         const worker = new Worker(URL.createObjectURL(new Blob([`
+let i = 0;
 async function cb(args) {
-    removeEventListener("message", args);
+    if (++i !== 1) return;
     args = args.data;
-    const res = await Function("arguments", args[0])(args[1]);
-    postMessage([args[2], res]);
+    postMessage([args[2], "end", await Function("arguments_", args[0])(args[1])]);
 }
 addEventListener("message", cb);
-`], {
+`.replaceAll("\n", "")], {
             type: "application/javascript"
         })));
-        return runnerEnder(worker, func);
+        return runnerProcessor(worker, func, thread);
     }
 
     const runner = isNode ? runnerNodeRaw : runnerWebRaw;
 
-    function Thread(func) {
-        const run = runner(func);
-        const out = (...args) => thread.run(...args);
-        const thread = {
-            allowsAny: true,
-            definitions: {},
-            setAllowsAny(value = true) {
-                this.allowsAny = value;
-                return this;
-            },
-            define(obj) {
-                Object.assign(this.definitions, obj);
-                return this;
-            },
-            use(obj) {
-                this.define(obj);
-                return this;
-            },
-            run(...args) {
-                return run(args, this.definitions, this.allowsAny)
-            }
+    function makeChannel(parent = null) {
+        function Channel(func) {
+            const id = ++__id;
+            const out = (...args) => thread.run(...args);
+            let allowsAny = true;
+            let definitions = {};
+            let autoTermination = true;
+            const thread = {
+                __parents: [Thread, Channel],
+                get id() {
+                    return id;
+                },
+                get allowsAny() {
+                    return allowsAny;
+                },
+                get autoTermination() {
+                    return autoTermination;
+                },
+                get definitions() {
+                    return definitions;
+                },
+                get worker() {
+                    return worker;
+                },
+                get isAlive() {
+                    return !!Thread.threads[id];
+                },
+                get parent() {
+                    return Channel;
+                },
+                setAllowsAny(value = true) {
+                    allowsAny = value;
+                    return this;
+                },
+                setAutoTermination(value = true) {
+                    autoTermination = value;
+                    return this;
+                },
+                define(obj) {
+                    Object.assign(definitions, obj);
+                    return this;
+                },
+                use(obj) {
+                    this.define(obj);
+                    return this;
+                },
+                run(...args) {
+                    return run(args, definitions, allowsAny, autoTermination)
+                },
+                terminate() {
+                    Channel.terminate(id);
+                    return this;
+                }
+            };
+            Channel.addChild(thread);
+            const [worker, run] = runner(func, thread);
+            return Object.assign(out, thread);
+        }
+
+        Channel.parent = parent;
+        Channel.addChild = child => {
+            Channel.threads[child.id] = child;
+            if (Channel.parent) Channel.parent.addChild(child);
         };
-        return Object.assign(out, Thread);
+        Channel.prepare = Channel;
+        Channel.Thread = Channel;
+        Channel.find = function (id) {
+            return Channel.threads[id] ?? null;
+        };
+        Channel.sendTo = function (id, msg) {
+            sendTo(id, msg);
+        };
+        Channel.broadcast = function (msg) {
+            for (const id in Channel.threads) sendTo(id, msg);
+        }
+        Channel.terminate = function (id) {
+            const thread = Thread.threads[id];
+            if (!thread) return;
+            thread.worker.terminate();
+            for (const par of thread.__parents) delete par.threads[id];
+        };
+        Channel.threads = {};
+        return Channel;
     }
 
-    Thread.prepare = Thread;
-    Thread.runner = runner;
+    const Thread = makeChannel();
 
-    if (isNode) {
-        const {isMainThread, parentPort} = require("worker" + "_threads"); // maybe this fixes the possible jsx issues?
-        if (!isMainThread) parentPort.once("message", async args => {
-            const res = await Function("arguments", args[0])(args[1]);
-            parentPort.postMessage([args[2], res]);
-        });
+    function sendTo(id, msg) {
+        const thread = Thread.threads[id];
+        if (!thread) return;
+        thread.worker.postMessage(msg);
     }
 
-    Thread.Thread = Thread;
-    Object.freeze(Thread);
-
-    //EXPORT//
-    if (isNode) module.exports = Thread;
-    else window.Thread = Thread;
-    //EXPORT//
-    //CONTENT//
+    //@buildExport//
+    if (isNode) module.exports = Thread; else window.Thread = Thread;
+    //@buildExport//
 })();

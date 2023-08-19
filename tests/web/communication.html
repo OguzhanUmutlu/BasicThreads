@@ -1,0 +1,30 @@
+<script src="../../index.js"></script>
+<script type="module">
+
+
+    const thread1 = Thread(() => {
+        let messageCounter = 0;
+        addEventListener("message", e => {
+            console.log(e.data);
+            messageCounter++;
+            if (messageCounter === 2) {
+                // we got all we needed!
+                close(); // closes the thread!
+            }
+        });
+    });
+
+    thread1.setAutoTermination(false).run();
+
+    const thread2 = Thread(id => {
+
+        Thread.sendTo(id, "hello! this is sent to the thread with the id " + id);
+
+        Thread.broadcast("hello! this is sent to all threads!");
+
+    });
+
+    thread2.run(thread1.id);
+
+
+</script>

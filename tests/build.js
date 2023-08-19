@@ -5,11 +5,10 @@ const uglify = require("uglify-js");
 const T = Date.now();
 
 const spl1 = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8")
-    .split("//EXPORT//");
-const spl2 = (spl1[0] + "export default Thread;" + spl1[2]).split("//CONTENT//");
+    .split("//@buildExport//");
 fs.writeFileSync(
     path.join(__dirname, "../index.module.js"),
-    spl2[1].split("\n").map(i => i.replace(/^ {4}/, "")).join("\n").trim()
+    "const Thread = " + spl1[0] + "return Thread;" + spl1[2] + "\nexport default Thread;"
 );
 
 const uMain = uglify.minify(fs.readFileSync(path.join(__dirname, "../index.js"), "utf8"));
