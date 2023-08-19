@@ -1,7 +1,7 @@
 {
   "name": "basicthreads",
   "description": "This is a Node.js thread library that makes creating threads really easy!",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "main": "index.min.js",
   "repository": {
     "type": "git",

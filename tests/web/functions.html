@@ -22,13 +22,16 @@
     }
 
     console.time();
-    console.log(await Thread(A.A)());
-    console.log(await Thread(A.B)());
-    console.log(await Thread(A.C)());
-    console.log(await Thread(A.D)());
-    console.log(await Thread(A.E)());
-    console.log(await Thread(A.F)());
-    console.log(await Thread(A.G)());
-    console.log(await Thread(A.H)());
+    const threads = [
+        Thread(A.A)(),
+        Thread(A.B)(),
+        Thread(A.C)(),
+        Thread(A.D)(),
+        Thread(A.E)(),
+        Thread(A.F)(),
+        Thread(A.G)(),
+        Thread(A.H)()
+    ];
+    console.log(...await Promise.all(threads));
     console.timeEnd();
 </script>

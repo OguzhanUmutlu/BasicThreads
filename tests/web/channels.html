@@ -1,0 +1,24 @@
+<script src="../../index.js"></script>
+<script type="module">
+    const myChannel = Thread.channel()
+
+    const thread1 = myChannel(() => { // you could also do myChannel.prepare()
+        addEventListener("message", message => { // a web example, check thread communication wiki to learn more about handling messages
+            console.log("Got a message: " + message.data)
+        })
+    })
+
+    const thread2 = myChannel(() => {
+
+        Thread.broadcastToChannel("Hello!") // this will broadcast to the current channel and its child threads
+
+        Thread.broadcast("hello, everyone!") // this will broadcast to all existing threads
+
+    })
+
+    thread1.setAutoTermination(false) // so it listens for messages!
+
+    await thread1.run()
+
+    await thread2.run() // thread1 will log two messages that thread2 sent
+</script>

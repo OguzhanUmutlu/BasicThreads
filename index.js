@@ -97,8 +97,9 @@
                         if (autoTermination) worker.terminate();
                         return;
                     }
-                    if (msg[1] === "sendTo") return thread.parent.sendTo(msg[2], msg[3]);
-                    if (msg[1] === "broadcast") return thread.parent.broadcast(msg[2]);
+                    if (msg[1] === "sendTo") return thread.send(msg[3]);
+                    if (msg[1] === "broadcast") return Thread.broadcast(msg[2]);
+                    if (msg[1] === "broadcastToChannel") return thread.parent.broadcastToChannel(msg[2]);
                 };
                 const onTerminate = () => r();
                 if (isNode) {
@@ -125,7 +126,11 @@ const Thread = {
     },
     broadcast: msg => {
         postMessage(["${uuid}", "broadcast", msg]);
-    }
+    },
+    broadcastToChannel: msg => {
+        postMessage(["${uuid}", "broadcastToChannel", msg]);
+    },
+    isMainThread: false
 };
 return (async () => (
 
@@ -168,7 +173,7 @@ addEventListener("message", cb);
             let definitions = {};
             let autoTermination = true;
             const thread = {
-                __parents: [Thread, Channel],
+                __parents: [],
                 get id() {
                     return id;
                 },
@@ -212,6 +217,9 @@ addEventListener("message", cb);
                 terminate() {
                     Channel.terminate(id);
                     return this;
+                },
+                send(msg) {
+                    worker.postMessage(msg);
                 }
             };
             Channel.addChild(thread);
@@ -219,8 +227,12 @@ addEventListener("message", cb);
             return Object.assign(out, thread);
         }
 
+        Channel.channel = function () {
+            return makeChannel(Channel);
+        };
         Channel.parent = parent;
-        Channel.addChild = child => {
+        Channel.addChild = function (child) {
+            child.__parents.push(Channel);
             Channel.threads[child.id] = child;
             if (Channel.parent) Channel.parent.addChild(child);
         };
@@ -230,11 +242,16 @@ addEventListener("message", cb);
             return Channel.threads[id] ?? null;
         };
         Channel.sendTo = function (id, msg) {
-            sendTo(id, msg);
+            const thread = Thread.threads[id];
+            if (!thread) return;
+            thread.postMessage(msg);
         };
         Channel.broadcast = function (msg) {
-            for (const id in Channel.threads) sendTo(id, msg);
-        }
+            for (const id in Channel.threads) Channel.threads[id].send(msg);
+        };
+        Channel.broadcastToChannel = function (msg) {
+            return Channel.broadcast(msg);
+        };
         Channel.terminate = function (id) {
             const thread = Thread.threads[id];
             if (!thread) return;
@@ -245,16 +262,11 @@ addEventListener("message", cb);
         Channel.immediate = function (cb, ...args) {
             return Channel(cb)(...args);
         };
+        Channel.isMainThread = true;
         return Channel;
     }
 
     const Thread = makeChannel();
-
-    function sendTo(id, msg) {
-        const thread = Thread.threads[id];
-        if (!thread) return;
-        thread.worker.postMessage(msg);
-    }
 
     //@buildExport//
     if (isNode) module.exports = Thread; else window.Thread = Thread;

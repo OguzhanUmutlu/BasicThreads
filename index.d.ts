@@ -36,6 +36,7 @@ type Thread = ThreadConstructor | {
     find(id: number): ThreadInstance | null
     sendTo(id: number, message: Cloneable): void
     broadcast(message: Cloneable): void
+    broadcastToChannel(message: Cloneable): void
     terminate(id: number): void
     channel(): Thread
 };
