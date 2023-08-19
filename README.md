@@ -41,6 +41,8 @@ In file:
 </script>
 ```
 
+## [Click me to get more information about BasicThreads from our wiki!](https://github.com/OguzhanUmutlu/BasicThreads/wiki)
+
 ## Why use threads in first place?
 
 Threads are vital for managing resource-intensive tasks in programming. Imagine having a large project where certain
