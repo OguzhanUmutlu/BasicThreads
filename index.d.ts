@@ -30,6 +30,7 @@ type Thread = ThreadConstructor | {
     readonly children: Thread[]
     threads: Record<number, ThreadInstance>
     prepare: ThreadConstructor
+    immediate(callback: Function | string, ...args: any[]): Result
     //runner(callback: Function | string, id?: number): (args: any[], define: Record<string, any>, allowExtra?: boolean) => Result
     Thread: Thread
     find(id: number): ThreadInstance | null
