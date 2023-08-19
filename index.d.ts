@@ -25,7 +25,7 @@ type ThreadInstance<
     terminate(): ThreadInstance
 });
 type ThreadConstructor = (callback: Function | string) => ThreadInstance;
-type Thread = ThreadConstructor | {
+type Thread = ThreadConstructor & {
     readonly parent: Thread | null;
     readonly children: Thread[]
     threads: Record<number, ThreadInstance>
