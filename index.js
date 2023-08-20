@@ -5,11 +5,15 @@
     const isNode = typeof window === "undefined" && typeof require !== "undefined";
     const _global = isNode ? global : (typeof window === "undefined" ? {} : window);
     const WT = () => "worker_threads"; // maybe this fixes the possible jsx issues?
-    const { Worker: NodeWorker, isMainThread, parentPort } = isNode ? require(WT()) : {};
+    const {Worker: NodeWorker, isMainThread, parentPort} = isNode ? require(WT()) : {};
+    const crypto_ = isNode ? (global.crypto ?? require("crypto")) : crypto;
 
     if (isNode && !isMainThread) {
         global.close = () => parentPort.close();
-        return parentPort.once("message", async args => {
+        let uuid;
+        return parentPort.on("message", async args => {
+            uuid = uuid || args[2];
+            if (!args || uuid !== args[2] || args.length !== 3) return;
             parentPort.postMessage([args[2], "end", await Function("arguments_", args[0])(args[1])]);
         });
     }
@@ -39,7 +43,7 @@
                 }
                 const id = getObjId(any.constructor);
                 list.push(`${p}=Object.assign(new arguments_[2]._${id}(),${p});`);
-                return { ...any };
+                return {...any};
             }
             for (const i in any) {
                 any[i] = doAllowAny(any[i], list, p + `[${JSON.stringify(i)}]`);
@@ -88,10 +92,9 @@
 
     function runnerProcessor(worker, func, thread) {
         return [worker, (args = [], define = {}, allowAny = true, autoTermination = true) => {
-            const uuid = (isNode ? (global.crypto ?? require("crypto")) : crypto).randomUUID();
             const p = new Promise(r => {
                 const onMessage = msg => {
-                    if (!msg || msg[0] !== uuid) return;
+                    if (!msg || msg[0] !== thread.__uuid__) return;
                     if (msg[1] === "end") {
                         r(msg[2]);
                         if (autoTermination) worker.terminate();
@@ -122,13 +125,13 @@
 const {${Object.keys(define).join(",")}} = arguments_[1];
 const Thread = {
     sendTo: (id, msg) => {
-        postMessage(["${uuid}", "sendTo", id, msg]);
+        postMessage(["${thread.__uuid__}", "sendTo", id, msg]);
     },
     broadcast: msg => {
-        postMessage(["${uuid}", "broadcast", msg]);
+        postMessage(["${thread.__uuid__}", "broadcast", msg]);
     },
     broadcastToChannel: msg => {
-        postMessage(["${uuid}", "broadcastToChannel", msg]);
+        postMessage(["${thread.__uuid__}", "broadcastToChannel", msg]);
     },
     isMainThread: false
 };
@@ -139,7 +142,7 @@ ${stringifyFunction(func)}
 // YOUR CODE ENDS HERE...
 
 )(...arguments_[0]))()`;
-            worker.postMessage([code, arguments_, uuid]);
+            worker.postMessage([code, arguments_, thread.__uuid__]);
             return p;
         }];
     }
@@ -150,10 +153,11 @@ ${stringifyFunction(func)}
 
     function runnerWebRaw(func, thread) {
         const worker = new Worker(URL.createObjectURL(new Blob([`
-let i = 0;
+let uuid;
 async function cb(args) {
-    if (++i !== 1) return;
     args = args.data;
+    uuid = uuid || args[2];
+    if (!args || uuid !== args[2] || args.length !== 3) return;
     postMessage([args[2], "end", await Function("arguments_", args[0])(args[1])]);
 }
 addEventListener("message", cb);
@@ -168,12 +172,16 @@ addEventListener("message", cb);
     function makeChannel(parent = null) {
         function Channel(func) {
             const id = ++__id;
+            const uuid = crypto_.randomUUID();
             const out = (...args) => thread.run(...args);
             let allowsAny = true;
             let definitions = {};
             let autoTermination = true;
             const thread = {
                 __parents: [],
+                get __uuid__() {
+                    return uuid;
+                },
                 get id() {
                     return id;
                 },

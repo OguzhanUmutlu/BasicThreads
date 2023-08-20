@@ -1,0 +1,9 @@
+<script src="../../index.js"></script>
+<script type="module">
+    const thread = Thread(() => 2 + 2);
+    thread.setAutoTermination(false);
+    console.log(await thread())
+    console.log(await thread())
+    console.log(await thread())
+    console.log(await thread())
+</script>
