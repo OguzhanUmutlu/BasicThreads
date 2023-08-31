@@ -4,19 +4,10 @@
     const getObjId = obj => objId.get(obj) || (objId.set(obj, ++__id) && __id);
     const isNode = typeof window === "undefined" && typeof require !== "undefined";
     const _global = isNode ? global : (typeof window === "undefined" ? {} : window);
-    const WT = () => "worker_threads"; // maybe this fixes the possible jsx issues?
-    const {Worker: NodeWorker, isMainThread, parentPort} = isNode ? require(WT()) : {};
-    const crypto_ = isNode ? (global.crypto ?? require("crypto")) : crypto;
-
-    if (isNode && !isMainThread) {
-        global.close = () => parentPort.close();
-        let uuid;
-        return parentPort.on("message", async args => {
-            uuid = uuid || args[2];
-            if (!args || uuid !== args[2] || args.length !== 3) return;
-            parentPort.postMessage([args[2], "end", await Function("arguments_", args[0])(args[1])]);
-        });
-    }
+    const _require = n => isNode ? require(n) : {}; // maybe this fixes the possible jsx issues?
+    const {Worker: NodeWorker} = _require("worker_threads");
+    const crypto_ = _global.crypto ?? _require("crypto");
+    const path = _require("path");
 
     function isClass(func) {
         return typeof func === "function" && func.prototype && func.prototype.constructor === func;
@@ -100,7 +91,7 @@
                         if (autoTermination) worker.terminate();
                         return;
                     }
-                    if (msg[1] === "sendTo") return thread.send(msg[3]);
+                    if (msg[1] === "sendTo") return Thread.sendTo(msg[2], msg[3]);
                     if (msg[1] === "broadcast") return Thread.broadcast(msg[2]);
                     if (msg[1] === "broadcastToChannel") return thread.parent.broadcastToChannel(msg[2]);
                 };
@@ -124,13 +115,13 @@
             const code = `${definitionReplacements.join("")}
 const {${Object.keys(define).join(",")}} = arguments_[1];
 const Thread = {
-    sendTo: (id, msg) => {
+    sendTo(id, msg) {
         postMessage(["${thread.__uuid__}", "sendTo", id, msg]);
     },
-    broadcast: msg => {
+    broadcast(msg) {
         postMessage(["${thread.__uuid__}", "broadcast", msg]);
     },
-    broadcastToChannel: msg => {
+    broadcastToChannel(msg) {
         postMessage(["${thread.__uuid__}", "broadcastToChannel", msg]);
     },
     isMainThread: false
@@ -148,7 +139,9 @@ ${stringifyFunction(func)}
     }
 
     function runnerNodeRaw(func, thread) {
-        return runnerProcessor(new NodeWorker(__filename), func, thread);
+        let dir = __dirname;
+        if (path.dirname(dir) === "build") dir = path.join(dir, "..");
+        return runnerProcessor(new NodeWorker(path.join(dir, "worker.js")), func, thread);
     }
 
     function runnerWebRaw(func, thread) {
@@ -252,10 +245,12 @@ addEventListener("message", cb);
         Channel.sendTo = function (id, msg) {
             const thread = Thread.threads[id];
             if (!thread) return;
-            thread.postMessage(msg);
+            thread.send(msg);
+            return this;
         };
         Channel.broadcast = function (msg) {
             for (const id in Channel.threads) Channel.threads[id].send(msg);
+            return this;
         };
         Channel.broadcastToChannel = function (msg) {
             return Channel.broadcast(msg);
@@ -265,6 +260,7 @@ addEventListener("message", cb);
             if (!thread) return;
             thread.worker.terminate();
             for (const par of thread.__parents) delete par.threads[id];
+            return this;
         };
         Channel.threads = {};
         Channel.immediate = function (cb, ...args) {
@@ -275,6 +271,12 @@ addEventListener("message", cb);
     }
 
     const Thread = makeChannel();
+    /*Thread.globalize = function () {
+        Function.prototype.thread = function (...args) {
+            return Thread.immediate(this, ...args);
+        };
+        return Thread;
+    };*/
 
     //@buildExport//
     if (isNode) module.exports = Thread; else Object.defineProperty(_global, "Thread", {

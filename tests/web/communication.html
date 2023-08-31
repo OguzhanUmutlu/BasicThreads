@@ -12,9 +12,9 @@
                 close(); // closes the thread!
             }
         });
-    });
+    }).setAutoTermination(false);
 
-    thread1.setAutoTermination(false).run();
+    thread1.run();
 
     const thread2 = Thread(id => {
 

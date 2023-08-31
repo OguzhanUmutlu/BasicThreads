@@ -1,0 +1,10 @@
+<script src="../../index.js"></script>
+<script type="module">
+    import Thread from "../../threads.mjs";
+    const thread = Thread(() => Math.random());
+    thread.setAutoTermination(false);
+    console.log(await thread())
+    console.log(await thread())
+    console.log(await thread())
+    console.log(await thread())
+</script>

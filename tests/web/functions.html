@@ -1,3 +1,4 @@
+<!--suppress ALL-->
 <script src="../../index.js"></script>
 <script type="module">
     class A {
@@ -21,7 +22,6 @@
         };
     }
 
-    console.time();
     const threads = [
         Thread(A.A)(),
         Thread(A.B)(),
@@ -33,5 +33,4 @@
         Thread(A.H)()
     ];
     console.log(...await Promise.all(threads));
-    console.timeEnd();
 </script>

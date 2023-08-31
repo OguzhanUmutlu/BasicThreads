@@ -27,9 +27,16 @@ fs.writeFileSync(
     uModule.code
 );
 
-const dtsCode = fs.readFileSync(path.join(__dirname, "../index.d.ts"));
-fs.writeFileSync(path.join(__dirname, "../build/index.d.mts"), dtsCode);
-fs.writeFileSync(path.join(__dirname, "../build/index.min.d.ts"), dtsCode);
-fs.writeFileSync(path.join(__dirname, "../threads.d.mts"), dtsCode);
+const dtsCode = fs.readFileSync(path.join(__dirname, "../index.d.ts"), "utf8");
+const EReg = /[ \n]*([<{\[(|&,=:\n;]|=>)[ \n]*/g;
+const CommReg = /[\r\t\f\v]|\/\/[^\n]+|\/\*.*?\*\//g;
+const dtsMinCode = dtsCode
+    .replaceAll(CommReg, "")
+    .replaceAll(/ {2,}/g, " ")
+    .replaceAll(EReg, m => m.trim() || "\n")
+    .replaceAll(/[^<{[(]\n[^>}\])]/g, m => m[0] + ";" + m[2]);
+fs.writeFileSync(path.join(__dirname, "../build/index.d.mts"), dtsMinCode);
+fs.writeFileSync(path.join(__dirname, "../build/index.min.d.ts"), dtsMinCode);
+fs.writeFileSync(path.join(__dirname, "../threads.d.mts"), dtsMinCode);
 
 console.log("Built in " + (Date.now() - T) + "ms!");
