@@ -4,6 +4,8 @@ const uglify = require("uglify-js");
 
 const T = Date.now();
 
+if (!fs.existsSync(path.join(__dirname, "../build"))) fs.mkdirSync(path.join(__dirname, "../build"));
+
 const mainCode = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
 const spl1 = mainCode
     .split("//@buildExport//");
